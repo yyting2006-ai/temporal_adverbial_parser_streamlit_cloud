@@ -8,13 +8,13 @@ This project includes a Streamlit version of the teacher annotation website.
 - `requirements.txt`: Python dependencies.
 - `.streamlit/config.toml`: visual configuration.
 - `data/annotation_tasks/tasks.jsonl`: annotation tasks.
-- `human_validation/streamlit_annotations.sqlite`: created automatically at runtime.
+- `supabase_schema.sql`: external database schema for formal collection.
 
 ## Recommended Storage
 
 For formal teacher data collection, use Supabase. Streamlit stores secrets
-outside GitHub, and the app now automatically uses Supabase when these secrets
-are configured:
+outside GitHub, and the app automatically uses Supabase when these root-level
+secrets are configured:
 
 ```toml
 SUPABASE_URL = "https://your-project-ref.supabase.co"
@@ -37,6 +37,9 @@ SQLite files on the app container are not a durable research database. Export
 CSV frequently, especially before redeploying or changing the app. For formal
 large-scale data collection, use Supabase or another institution-approved
 backend.
+
+The SQLite fallback is only for local development when Supabase secrets are not
+configured.
 
 ## Local Test
 

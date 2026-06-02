@@ -4,6 +4,7 @@ import csv
 import html
 import io
 import json
+import os
 import sqlite3
 import time
 from pathlib import Path
@@ -66,11 +67,7 @@ st.set_page_config(
 
 
 def get_secret(key: str, default: str = "") -> str:
-    try:
-        value = st.secrets.get(key, default)
-    except Exception:
-        return default
-    return str(value) if value is not None else default
+    return os.getenv(key, default)
 
 
 @st.cache_resource(show_spinner=False)
