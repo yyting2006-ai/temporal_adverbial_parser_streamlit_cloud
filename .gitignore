@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+._*
+.DS_Store
+human_validation/*.sqlite
+human_validation/*.sqlite-*
+human_validation/validation_summary.json
+human_validation/validation_summary.md
