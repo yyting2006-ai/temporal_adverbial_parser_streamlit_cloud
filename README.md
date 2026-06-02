@@ -10,13 +10,33 @@ This project includes a Streamlit version of the teacher annotation website.
 - `data/annotation_tasks/tasks.jsonl`: annotation tasks.
 - `human_validation/streamlit_annotations.sqlite`: created automatically at runtime.
 
-## Important Storage Warning
+## Recommended Storage
+
+For formal teacher data collection, use Supabase. Streamlit stores secrets
+outside GitHub, and the app now automatically uses Supabase when these secrets
+are configured:
+
+```toml
+SUPABASE_URL = "https://your-project-ref.supabase.co"
+SUPABASE_SERVICE_ROLE_KEY = "your-service-role-key"
+ADMIN_TOKEN = "your-private-export-token"
+```
+
+Before deployment, create the database tables by running:
+
+```text
+supabase_schema.sql
+```
+
+in Supabase Dashboard -> SQL Editor.
+
+## SQLite Fallback Warning
 
 Streamlit Community Cloud is convenient for pilot teacher review, but local
 SQLite files on the app container are not a durable research database. Export
 CSV frequently, especially before redeploying or changing the app. For formal
-large-scale data collection, use an external database such as Supabase,
-Google Sheets, Snowflake, or another institution-approved backend.
+large-scale data collection, use Supabase or another institution-approved
+backend.
 
 ## Local Test
 
@@ -47,10 +67,12 @@ streamlit_app.py
 ```
 
 7. Optional: in `Advanced settings`, set a Python version such as `3.12`.
-8. Optional: in `Secrets`, paste:
+8. Recommended: in `Secrets`, paste:
 
 ```toml
 ADMIN_TOKEN = "your-private-export-token"
+SUPABASE_URL = "https://your-project-ref.supabase.co"
+SUPABASE_SERVICE_ROLE_KEY = "your-service-role-key"
 ```
 
 9. Click `Deploy`.

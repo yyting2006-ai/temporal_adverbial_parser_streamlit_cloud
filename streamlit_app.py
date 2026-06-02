@@ -41,6 +41,32 @@ st.set_page_config(
 )
 
 
+def get_secret(key: str, default: str = "") -> str:
+    try:
+        value = st.secrets.get(key, default)
+    except Exception:
+        return default
+    return str(value) if value is not None else default
+
+
+@st.cache_resource(show_spinner=False)
+def supabase_client():
+    url = get_secret("SUPABASE_URL")
+    key = get_secret("SUPABASE_SERVICE_ROLE_KEY") or get_secret("SUPABASE_KEY")
+    if not url or not key:
+        return None
+    try:
+        from supabase import create_client
+    except Exception as exc:
+        st.warning(f"Supabase 依赖未安装，已临时使用 SQLite。错误：{exc}")
+        return None
+    return create_client(url, key)
+
+
+def using_supabase() -> bool:
+    return supabase_client() is not None
+
+
 @st.cache_data(show_spinner=False)
 def load_tasks(path: str) -> list[dict[str, Any]]:
     task_file = Path(path)
@@ -57,6 +83,8 @@ def connect() -> sqlite3.Connection:
 
 
 def init_db() -> None:
+    if using_supabase():
+        return
     con = connect()
     try:
         con.execute(
@@ -106,6 +134,21 @@ def timestamp() -> str:
 
 def save_annotator(payload: dict[str, Any]) -> None:
     now = timestamp()
+    client = supabase_client()
+    if client:
+        client.table("annotators").upsert(
+            {
+                "annotator_id": payload["annotator_id"],
+                "display_name": payload.get("display_name", ""),
+                "professional_role": payload.get("professional_role", ""),
+                "experience_years": payload.get("experience_years", ""),
+                "consent": True,
+                "created_at": now,
+            },
+            on_conflict="annotator_id",
+        ).execute()
+        return
+
     con = connect()
     try:
         con.execute(
@@ -134,6 +177,17 @@ def save_annotator(payload: dict[str, Any]) -> None:
 
 
 def answered_task_ids(annotator_id: str, task_type: str) -> set[str]:
+    client = supabase_client()
+    if client:
+        result = (
+            client.table("annotations")
+            .select("task_id")
+            .eq("annotator_id", annotator_id)
+            .eq("task_type", task_type)
+            .execute()
+        )
+        return {row["task_id"] for row in result.data or []}
+
     con = connect()
     try:
         rows = con.execute(
@@ -169,6 +223,29 @@ def next_task(
 
 def save_annotation(task: dict[str, Any], payload: dict[str, Any]) -> None:
     now = timestamp()
+    row = {
+        "task_id": task["task_id"],
+        "task_type": task["task_type"],
+        "annotator_id": payload["annotator_id"],
+        "judgement": payload["judgement"],
+        "span_correct": payload.get("span_correct", ""),
+        "role_correct": payload.get("role_correct", ""),
+        "anchor_correct": payload.get("anchor_correct", ""),
+        "usefulness": payload.get("usefulness"),
+        "confidence": payload.get("confidence"),
+        "corrected_span": payload.get("corrected_span", ""),
+        "corrected_role": payload.get("corrected_role", ""),
+        "notes": payload.get("notes", ""),
+        "payload": payload,
+        "task_json": task,
+        "created_at": now,
+        "updated_at": now,
+    }
+    client = supabase_client()
+    if client:
+        client.table("annotations").upsert(row, on_conflict="task_id,annotator_id").execute()
+        return
+
     con = connect()
     try:
         con.execute(
@@ -205,11 +282,11 @@ def save_annotation(task: dict[str, Any], payload: dict[str, Any]) -> None:
                 payload.get("corrected_span", ""),
                 payload.get("corrected_role", ""),
                 payload.get("notes", ""),
-                json.dumps(payload, ensure_ascii=False),
-                json.dumps(task, ensure_ascii=False),
-                now,
-                now,
-            ),
+                    json.dumps(payload, ensure_ascii=False),
+                    json.dumps(task, ensure_ascii=False),
+                    now,
+                    now,
+                ),
         )
         con.commit()
     finally:
@@ -217,6 +294,11 @@ def save_annotation(task: dict[str, Any], payload: dict[str, Any]) -> None:
 
 
 def response_rows() -> list[dict[str, Any]]:
+    client = supabase_client()
+    if client:
+        result = client.table("annotations").select("*").order("created_at").execute()
+        return result.data or []
+
     con = connect()
     con.row_factory = sqlite3.Row
     try:
@@ -249,8 +331,14 @@ def csv_bytes(rows: list[dict[str, Any]]) -> bytes:
     out = io.StringIO()
     writer = csv.DictWriter(out, fieldnames=fields)
     writer.writeheader()
-    writer.writerows({field: row.get(field, "") for field in fields} for row in rows)
+    writer.writerows({field: csv_cell(row.get(field, "")) for field in fields} for row in rows)
     return ("\ufeff" + out.getvalue()).encode("utf-8")
+
+
+def csv_cell(value: Any) -> str:
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, ensure_ascii=False)
+    return "" if value is None else str(value)
 
 
 def highlight_text(text: str, spans: list[dict[str, Any]]) -> str:
@@ -321,7 +409,7 @@ def render_task(task: dict[str, Any]) -> None:
 
 
 def is_admin() -> bool:
-    token = st.secrets.get("ADMIN_TOKEN", "")
+    token = get_secret("ADMIN_TOKEN")
     if not token:
         return True
     supplied = st.sidebar.text_input("管理员口令", type="password")
@@ -415,7 +503,8 @@ def main() -> None:
         st.divider()
         st.header("数据导出")
         rows = response_rows()
-        st.caption(f"当前已收集 {len(rows)} 条评审记录")
+        backend = "Supabase" if using_supabase() else "SQLite"
+        st.caption(f"当前已收集 {len(rows)} 条评审记录；存储后端：{backend}")
         if is_admin():
             st.download_button(
                 "下载 CSV",
