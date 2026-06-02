@@ -18,8 +18,14 @@ DB_PATH = ROOT / "human_validation" / "streamlit_annotations.sqlite"
 
 TASK_NAMES = {
     "weak_label_audit": "弱标签审核",
-    "model_output_review": "模型输出判断",
+    "model_output_review": "模型输出判断（核对系统预测）",
     "teaching_case_review": "教学案例可用性",
+}
+
+TASK_DESCRIPTIONS = {
+    "weak_label_audit": "请判断弱监督标签是否符合该时间表达在中文教学中的语法功能。主要看系统标签与候选片段是否合理。",
+    "model_output_review": "请把页面中的候选结果当作模型预测来核对：它是否找对时间片段、是否判成正确语法角色、是否关联到合适的谓词/事件。不是让您重新做整句标注。",
+    "teaching_case_review": "请判断该句是否适合作为时间词语作状语的教学诊断或课堂讲解案例。",
 }
 
 ROLE_NAMES = {
@@ -490,7 +496,9 @@ def main() -> None:
             list(TASK_NAMES.keys()),
             format_func=lambda key: TASK_NAMES[key],
             index=list(TASK_NAMES.keys()).index(st.session_state.task_type),
+            help="建议先完成“弱标签审核”和“模型输出判断”。其中“模型输出判断”是核对系统预测，不需要从零标完整句子。",
         )
+        st.caption(TASK_DESCRIPTIONS[task_type])
         if task_type != st.session_state.task_type:
             st.session_state.task_type = task_type
             st.session_state.skipped = set()
@@ -527,6 +535,7 @@ def main() -> None:
     col_title, col_skip = st.columns([0.8, 0.2])
     with col_title:
         st.subheader(TASK_NAMES[task["task_type"]])
+        st.caption(TASK_DESCRIPTIONS[task["task_type"]])
     with col_skip:
         if st.button("跳过此题"):
             st.session_state.skipped.add(task["task_id"])
@@ -560,12 +569,28 @@ def main() -> None:
             )
         c4, c5 = st.columns(2)
         with c4:
-            usefulness = st.slider("教学可用性", 1, 5, 3)
+            usefulness = st.selectbox(
+                "教学可用性",
+                [1, 2, 3, 4, 5],
+                index=2,
+                format_func=usefulness_name,
+                help="请选择该结果对课堂诊断、讲解或例句筛选的帮助程度。",
+            )
         with c5:
-            confidence = st.slider("判断把握度", 1, 5, 3)
+            confidence = st.selectbox(
+                "判断把握度",
+                [1, 2, 3, 4, 5],
+                index=2,
+                format_func=confidence_name,
+                help="请选择您对本题判断的把握程度。",
+            )
         c6, c7 = st.columns(2)
         with c6:
-            corrected_span = st.text_input("修正后的时间片段")
+            corrected_span = st.text_input(
+                "修正后的时间片段",
+                placeholder="仅在系统片段不对时填写，如：昨天晚上；若无须修正可留空",
+                help="这里不是必填项。只有当候选片段漏字、多字或漏检时，才填写您认为正确的时间词语范围。",
+            )
         with c7:
             corrected_role = st.selectbox(
                 "修正后的角色",
@@ -601,6 +626,26 @@ def choice_name(value: str) -> str:
         "partial": "部分正确",
         "no": "不正确",
         "not_applicable": "不适用",
+    }[value]
+
+
+def usefulness_name(value: int) -> str:
+    return {
+        1: "1 完全不可用",
+        2: "2 用处较小",
+        3: "3 一般可用",
+        4: "4 比较有用",
+        5: "5 非常适合教学/诊断",
+    }[value]
+
+
+def confidence_name(value: int) -> str:
+    return {
+        1: "1 没有把握",
+        2: "2 把握较低",
+        3: "3 一般",
+        4: "4 比较有把握",
+        5: "5 非常有把握",
     }[value]
 
 

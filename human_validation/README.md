@@ -23,10 +23,10 @@ have training in Chinese grammar teaching. If only one teacher is available,
 call the study a pedagogical validity audit rather than an expert gold-standard
 annotation.
 
-Minimum useful target:
+Recommended target after revision:
 
-- Weak-label audit: 100 items.
-- Model-output review: 100-130 items.
+- Weak-label audit: 150 items.
+- Model-output review: 150 items.
 - Teaching-case review: at least 100 items, or all 374 if the workload is
   acceptable.
 
@@ -56,8 +56,8 @@ This creates:
 
 Default task composition:
 
-- 100 weak-label audit items, stratified by label.
-- 130 model-output review items, stratified by predicted label where possible.
+- 150 weak-label audit items, stratified by label.
+- 150 model-output review items, stratified by predicted label where possible.
 - 374 teaching-case review items.
 
 ## Run the Website Locally

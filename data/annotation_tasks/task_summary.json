@@ -1,17 +1,17 @@
 {
-  "total_tasks": 604,
+  "total_tasks": 674,
   "by_type": {
-    "model_output_review": 130,
+    "model_output_review": 150,
     "teaching_case_review": 374,
-    "weak_label_audit": 100
+    "weak_label_audit": 150
   },
   "by_system_label": {
+    "DUR_COMP": 50,
+    "NONE": 70,
+    "TIME_NON_ADV": 10,
+    "TADV": 228,
     "TIME_ATTR": 30,
-    "TADV": 193,
-    "NONE": 40,
-    "DUR_COMP": 35,
     "FREQ_ADV": 30,
-    "TIME_NON_ADV": 20,
     "UNCONFIRMED": 256
   }
 }
