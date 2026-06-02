@@ -38,6 +38,24 @@ ROLE_NAMES = {
     "UNCONFIRMED": "待确认",
 }
 
+ANNOTATOR_IDS = ["请选择标注编号"] + [f"T{i:02d}" for i in range(1, 21)]
+
+JUDGEMENT_NAMES = {
+    "correct": "正确：候选结果整体可接受",
+    "partial": "部分正确：有些对，但片段、角色或谓词仍需修改",
+    "incorrect": "不正确：候选结果主要判断错误",
+    "not_sure": "不确定：无法根据当前句子判断",
+}
+
+METRIC_EXPLANATIONS = {
+    "overall": "总体判断：请综合判断这一条系统结果是否可用于论文统计。若片段、角色和关联谓词基本都对，选“正确”；若只对了一部分，选“部分正确”。",
+    "span": "时间片段：系统高亮或列出的时间表达范围是否准确，例如“昨天晚上”“三年后”“2012年12月”。多字、少字、漏掉核心时间词，都不算完全正确。",
+    "role": "语法角色：系统给出的类别是否准确。重点区分 TADV（时间词语作状语）、TIME_ATTR（时间定语）、DUR_COMP（时量/补语）、FREQ_ADV（频率副词）、TIME_NON_ADV（有时间词但不是状语）。",
+    "anchor": "关联谓词：时间表达修饰或限定的动作/事件是否找对。例如“昨天我去了北京”中，“昨天”关联“去”。若本题没有显示谓词或不适合判断，可选“不适用”。",
+    "usefulness": "教学可用性：这条结果对课堂讲解、错句诊断、例句筛选是否有帮助。它不等同于模型准确率，而是教学场景下是否值得使用。",
+    "confidence": "判断把握度：您对自己这道题判断的信心。句子含混、语境不足或边界难分时，可以选择较低把握度。",
+}
+
 
 st.set_page_config(
     page_title="时间词语作状语教师评审",
@@ -465,7 +483,17 @@ def main() -> None:
     with st.sidebar:
         st.header("评审信息")
         with st.form("annotator_form"):
-            annotator_id = st.text_input("标注编号", value=st.session_state.annotator_id, placeholder="如 T01")
+            current_index = (
+                ANNOTATOR_IDS.index(st.session_state.annotator_id)
+                if st.session_state.annotator_id in ANNOTATOR_IDS
+                else 0
+            )
+            annotator_id = st.selectbox(
+                "标注编号",
+                ANNOTATOR_IDS,
+                index=current_index,
+                help="请选择研究者提前分配给您的匿名编号，例如 T01、T02。不要填写真实姓名。",
+            )
             display_name = st.text_input("称呼或姓名缩写", placeholder="可留空")
             professional_role = st.selectbox(
                 "身份",
@@ -475,19 +503,19 @@ def main() -> None:
             consent = st.checkbox("我知晓本评审仅收集语法判断和教学可用性评分，结果将匿名用于论文统计。")
             started = st.form_submit_button("进入评审")
         if started:
-            if not annotator_id.strip():
-                st.error("请填写标注编号。")
+            if annotator_id == ANNOTATOR_IDS[0]:
+                st.error("请选择标注编号。")
             elif not consent:
                 st.error("请先确认知情说明。")
             else:
                 payload = {
-                    "annotator_id": annotator_id.strip(),
+                    "annotator_id": annotator_id,
                     "display_name": display_name.strip(),
                     "professional_role": professional_role,
                     "experience_years": experience_years,
                 }
                 save_annotator(payload)
-                st.session_state.annotator_id = annotator_id.strip()
+                st.session_state.annotator_id = annotator_id
                 st.success("已进入评审。")
 
         st.divider()
@@ -545,44 +573,51 @@ def main() -> None:
 
     with st.form(f"annotation_{task['task_id']}"):
         st.subheader("评审判断")
+        st.info(METRIC_EXPLANATIONS["overall"])
         judgement = st.radio(
             "总体判断",
             ["correct", "partial", "incorrect", "not_sure"],
-            format_func=lambda value: {
-                "correct": "正确",
-                "partial": "部分正确",
-                "incorrect": "不正确",
-                "not_sure": "不确定",
-            }[value],
+            format_func=lambda value: JUDGEMENT_NAMES[value],
             horizontal=True,
         )
         c1, c2, c3 = st.columns(3)
         with c1:
-            span_correct = st.selectbox("时间片段", ["", "yes", "partial", "no"], format_func=choice_name)
+            st.caption(METRIC_EXPLANATIONS["span"])
+            span_correct = st.selectbox(
+                "时间片段是否准确",
+                ["", "yes", "partial", "no"],
+                format_func=choice_name,
+            )
         with c2:
-            role_correct = st.selectbox("语法角色", ["", "yes", "partial", "no"], format_func=choice_name)
+            st.caption(METRIC_EXPLANATIONS["role"])
+            role_correct = st.selectbox(
+                "语法角色是否准确",
+                ["", "yes", "partial", "no"],
+                format_func=choice_name,
+            )
         with c3:
+            st.caption(METRIC_EXPLANATIONS["anchor"])
             anchor_correct = st.selectbox(
-                "关联谓词",
+                "关联谓词是否准确",
                 ["", "yes", "partial", "no", "not_applicable"],
                 format_func=choice_name,
             )
         c4, c5 = st.columns(2)
         with c4:
+            st.caption(METRIC_EXPLANATIONS["usefulness"])
             usefulness = st.selectbox(
                 "教学可用性",
                 [1, 2, 3, 4, 5],
                 index=2,
                 format_func=usefulness_name,
-                help="请选择该结果对课堂诊断、讲解或例句筛选的帮助程度。",
             )
         with c5:
+            st.caption(METRIC_EXPLANATIONS["confidence"])
             confidence = st.selectbox(
                 "判断把握度",
                 [1, 2, 3, 4, 5],
                 index=2,
                 format_func=confidence_name,
-                help="请选择您对本题判断的把握程度。",
             )
         c6, c7 = st.columns(2)
         with c6:
@@ -622,10 +657,10 @@ def main() -> None:
 def choice_name(value: str) -> str:
     return {
         "": "",
-        "yes": "正确",
-        "partial": "部分正确",
-        "no": "不正确",
-        "not_applicable": "不适用",
+        "yes": "正确：这一项没有明显问题",
+        "partial": "部分正确：大方向对，但需要小修",
+        "no": "不正确：这一项判断错误",
+        "not_applicable": "不适用：本题无法或无需判断",
     }[value]
 
 
