@@ -41,7 +41,7 @@ backend.
 ## Local Test
 
 ```bash
-cd "/Volumes/Extreme SSD/VScode/temporal_adverbial_parser"
+cd "/Volumes/Extreme SSD/VScode/temporal_adverbial_parser_streamlit_cloud"
 streamlit run streamlit_app.py
 ```
 
