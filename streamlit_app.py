@@ -41,10 +41,10 @@ ROLE_NAMES = {
 ANNOTATOR_IDS = ["请选择标注编号"] + [f"T{i:02d}" for i in range(1, 21)]
 
 JUDGEMENT_NAMES = {
-    "correct": "正确：候选结果整体可接受",
-    "partial": "部分正确：有些对，但片段、角色或谓词仍需修改",
-    "incorrect": "不正确：候选结果主要判断错误",
-    "not_sure": "不确定：无法根据当前句子判断",
+    "correct": "正确",
+    "partial": "部分正确",
+    "incorrect": "不正确",
+    "not_sure": "不确定",
 }
 
 METRIC_EXPLANATIONS = {
@@ -432,6 +432,60 @@ def render_task(task: dict[str, Any]) -> None:
         st.info("系统未给出具体时间片段。请判断该句是否确实没有相关时间状语，或是否漏检。")
 
 
+def candidate_html(task: dict[str, Any]) -> str:
+    links = task.get("candidate_links") or []
+    spans = task.get("candidate_spans") or []
+    if not links and not spans:
+        return "<div class='candidate-mini'>无候选片段：请判断是否确实没有相关时间状语，或是否漏检。</div>"
+    cards = []
+    if links:
+        for i, link in enumerate(links[:4], 1):
+            role = html.escape(str(link.get("role", "")))
+            role_name = html.escape(ROLE_NAMES.get(link.get("role", ""), ""))
+            span = html.escape(str(link.get("span_text", "")))
+            pred = html.escape(str(link.get("predicate_token_id", "无")))
+            cards.append(
+                "<div class='candidate-mini'>"
+                f"<b>候选{i}</b>：{span}<br>"
+                f"角色：{role} {role_name}<br>"
+                f"谓词 token：{pred}"
+                "</div>"
+            )
+        if len(links) > 4:
+            cards.append(f"<div class='candidate-mini'>另有 {len(links) - 4} 个候选，已省略细节。</div>")
+    else:
+        for i, span in enumerate(spans[:4], 1):
+            text = html.escape(str(span.get("text", "")))
+            role = html.escape(str(span.get("role", "")))
+            cards.append(f"<div class='candidate-mini'><b>候选{i}</b>：{text}<br>来源/角色：{role}</div>")
+        if len(spans) > 4:
+            cards.append(f"<div class='candidate-mini'>另有 {len(spans) - 4} 个候选，已省略细节。</div>")
+    return "".join(cards)
+
+
+def render_task_compact(task: dict[str, Any]) -> None:
+    meta = [
+        f"{task['task_id']}",
+        f"{task.get('dataset', '')}",
+        f"{task.get('split', '')}",
+        f"{task.get('system_label', '')} {ROLE_NAMES.get(task.get('system_label', ''), '')}",
+    ]
+    if task.get("level"):
+        meta.append(f"等级：{task['level']}")
+    st.caption(" ｜ ".join(item for item in meta if item))
+    st.markdown(
+        f"""
+        <div class="sentence-box">
+          {highlight_text(task.get("text", ""), task.get("candidate_spans", []))}
+        </div>
+        <div class="candidate-grid">
+          {candidate_html(task)}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def is_admin() -> bool:
     token = get_secret("ADMIN_TOKEN")
     if not token:
@@ -444,14 +498,43 @@ def inject_css() -> None:
     st.markdown(
         """
         <style>
+        .block-container {
+            max-width: 1400px;
+            padding-top: 0.6rem;
+            padding-bottom: 0.6rem;
+        }
+        div[data-testid="stVerticalBlock"] {
+            gap: 0.45rem;
+        }
+        div[data-testid="stForm"] {
+            border: 1px solid #d7dce3;
+            border-radius: 8px;
+            padding: 0.75rem 0.9rem;
+            background: #ffffff;
+        }
         .sentence-box {
-            margin: 0.5rem 0 1.2rem 0;
-            padding: 1.1rem 1.25rem;
+            margin: 0.2rem 0 0.55rem 0;
+            padding: 0.75rem 0.9rem;
             border: 1px solid #d7dce3;
             border-radius: 8px;
             background: #fff;
-            font-size: 1.35rem;
-            line-height: 2.0;
+            font-size: 1.1rem;
+            line-height: 1.65;
+            max-height: 14rem;
+            overflow: hidden;
+        }
+        .candidate-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.45rem;
+        }
+        .candidate-mini {
+            border: 1px solid #d7dce3;
+            border-radius: 8px;
+            background: #fbfcfd;
+            padding: 0.5rem 0.65rem;
+            font-size: 0.9rem;
+            line-height: 1.45;
         }
         mark {
             padding: 0.1rem 0.25rem;
@@ -477,8 +560,7 @@ def main() -> None:
     if "skipped" not in st.session_state:
         st.session_state.skipped = set()
 
-    st.title("时间词语作状语教师评审")
-    st.caption("用于弱标签、模型输出和教学案例的匿名教学有效性验证")
+    st.markdown("### 时间词语作状语教师评审")
 
     with st.sidebar:
         st.header("评审信息")
@@ -560,20 +642,25 @@ def main() -> None:
         st.success("当前任务类型已全部完成。可以切换任务类型继续评审。")
         return
 
-    col_title, col_skip = st.columns([0.8, 0.2])
+    col_title, col_skip = st.columns([0.82, 0.18])
     with col_title:
-        st.subheader(TASK_NAMES[task["task_type"]])
+        st.markdown(f"#### {TASK_NAMES[task['task_type']]}")
         st.caption(TASK_DESCRIPTIONS[task["task_type"]])
     with col_skip:
         if st.button("跳过此题"):
             st.session_state.skipped.add(task["task_id"])
             st.rerun()
 
-    render_task(task)
+    left, right = st.columns([0.58, 0.42], gap="medium")
+    with left:
+        render_task_compact(task)
 
-    with st.form(f"annotation_{task['task_id']}"):
-        st.subheader("评审判断")
-        st.info(METRIC_EXPLANATIONS["overall"])
+    with right, st.form(f"annotation_{task['task_id']}"):
+        st.markdown("##### 评审判断")
+        st.caption(
+            "指标速记：总体=整条结果；片段=高亮范围；角色=语法类别；"
+            "谓词=修饰的动作/事件；可用性=教学价值；把握度=您对判断的信心。"
+        )
         judgement = st.radio(
             "总体判断",
             ["correct", "partial", "incorrect", "not_sure"],
@@ -582,42 +669,42 @@ def main() -> None:
         )
         c1, c2, c3 = st.columns(3)
         with c1:
-            st.caption(METRIC_EXPLANATIONS["span"])
             span_correct = st.selectbox(
-                "时间片段是否准确",
+                "片段",
                 ["", "yes", "partial", "no"],
                 format_func=choice_name,
+                help=METRIC_EXPLANATIONS["span"],
             )
         with c2:
-            st.caption(METRIC_EXPLANATIONS["role"])
             role_correct = st.selectbox(
-                "语法角色是否准确",
+                "角色",
                 ["", "yes", "partial", "no"],
                 format_func=choice_name,
+                help=METRIC_EXPLANATIONS["role"],
             )
         with c3:
-            st.caption(METRIC_EXPLANATIONS["anchor"])
             anchor_correct = st.selectbox(
-                "关联谓词是否准确",
+                "谓词",
                 ["", "yes", "partial", "no", "not_applicable"],
                 format_func=choice_name,
+                help=METRIC_EXPLANATIONS["anchor"],
             )
         c4, c5 = st.columns(2)
         with c4:
-            st.caption(METRIC_EXPLANATIONS["usefulness"])
             usefulness = st.selectbox(
                 "教学可用性",
                 [1, 2, 3, 4, 5],
                 index=2,
                 format_func=usefulness_name,
+                help=METRIC_EXPLANATIONS["usefulness"],
             )
         with c5:
-            st.caption(METRIC_EXPLANATIONS["confidence"])
             confidence = st.selectbox(
                 "判断把握度",
                 [1, 2, 3, 4, 5],
                 index=2,
                 format_func=confidence_name,
+                help=METRIC_EXPLANATIONS["confidence"],
             )
         c6, c7 = st.columns(2)
         with c6:
@@ -632,7 +719,7 @@ def main() -> None:
                 ["", "TADV", "TIME_ATTR", "DUR_COMP", "FREQ_ADV", "TIME_NON_ADV", "NONE"],
                 format_func=lambda value: f"{value} {ROLE_NAMES.get(value, '')}" if value else "",
             )
-        notes = st.text_area("备注", placeholder="可说明为什么不正确，或它是否适合课堂讲解。")
+        notes = st.text_input("备注", placeholder="可说明为什么不正确；可留空。")
         submitted = st.form_submit_button("提交并进入下一题", type="primary")
 
     if submitted:
@@ -657,10 +744,10 @@ def main() -> None:
 def choice_name(value: str) -> str:
     return {
         "": "",
-        "yes": "正确：这一项没有明显问题",
-        "partial": "部分正确：大方向对，但需要小修",
-        "no": "不正确：这一项判断错误",
-        "not_applicable": "不适用：本题无法或无需判断",
+        "yes": "正确",
+        "partial": "部分正确",
+        "no": "不正确",
+        "not_applicable": "不适用",
     }[value]
 
 
